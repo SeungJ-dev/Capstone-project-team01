@@ -3,6 +3,14 @@ import pandas as pd
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import matplotlib as mpl
+
+# ✅ 한글 폰트 설정
+font_path = "C:/Windows/Fonts/malgun.ttf"  # Windows 기준
+font_name = fm.FontProperties(fname=font_path).get_name()
+mpl.rc('font', family=font_name)
 
 # 모델 로드
 model = joblib.load('model/lgbm_multi_model.pkl')
@@ -197,13 +205,21 @@ with st.form(key="input_form"):
     user_input = {}  # ✅ 반드시 먼저 선언
 
     for col in feature_cols:
-        st.markdown(f"<div style='font-size: 13px; color: lightgray;'>{feature_help.get(col, '')}</div>", unsafe_allow_html=True)
+        st.markdown(f"**{col}**")
     
+        if col in feature_help:
+            st.markdown(
+                f"<div style='font-size:13px; color: lightgray;'>{feature_help[col]}</div>",
+                unsafe_allow_html=True
+            )
+
         if encoder and col in obj_cols:
             options = list(map(str, encoder.categories_[obj_cols.index(col)]))
-            user_input[col] = st.selectbox(col, [""] + options, key=f"{col}_select")
+            user_input[col] = st.selectbox("", [""] + options, key=f"{col}_select")
         else:
-            user_input[col] = st.text_input(col, value="", key=f"{col}_input")
+            user_input[col] = st.text_input("", value="", key=f"{col}_input")
+
+
 
 
     submitted = st.form_submit_button("예측하기")
@@ -234,17 +250,24 @@ if submitted:
     probas_list = model.predict_proba(new_df)
 
     # 👉 결과 출력
+    # 예측 결과 출력
     st.subheader("📊 예측 결과")
     for idx, col in enumerate(target_cols):
         try:
             prob = probas_list[idx][0][1] * 100 if len(probas_list[idx][0]) > 1 else 0
             st.write(f"**{col}**: 양성 확률 **{prob:.2f}%**")
+
+            # ✅ 파이 차트 한글 깨짐 방지
+            labels = ['양성', '음성']
+            sizes = [prob, 100 - prob]
+
             fig, ax = plt.subplots()
-            ax.pie([prob, 100 - prob], labels=['양성', '음성'], autopct='%1.1f%%', startangle=90)
+            ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
             ax.axis('equal')
             st.pyplot(fig)
         except Exception as e:
             st.error(f"[{col}] 예측 실패: {e}")
+
 
     # 다시 입력
     st.success("예측이 완료되었습니다. 아래에서 다시 입력할 수 있습니다.")
