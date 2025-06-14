@@ -1,110 +1,55 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
-import shap
-import matplotlib.pyplot as plt
 import joblib
-import os
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OrdinalEncoder
-from sklearn.multioutput import MultiOutputClassifier
-from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score, classification_report
+import matplotlib.pyplot as plt
 
-def main():
-    df = pd.read_csv('data/BRFSS_2015ver18.csv', low_memory=False)
-    target_cols = ['BPHIGH4', 'CVDCRHD4', 'CVDSTRK3', 'CHCKIDNY', 'DIABETE3']
-    df = df.dropna(subset=target_cols)
-    for col in target_cols:
-        df = df[df[col].isin([0, 1])]
+# 모델 로드
+model = joblib.load('model/lgbm_multi_model.pkl')
 
-    # 말도 안되는 결과를 출력하는 6가지 컬럼 제외
-    feature_cols = [c for c in df.columns if c not in target_cols + ['BPMEDS', 'INSULIN', 'DOCTDIAB', 'CHKHEMO3', 'FEETCHK', 'DIABEYE']]
-    X = df[feature_cols].copy()
-    y = df[target_cols].astype(int)
-
-    obj_cols = X.select_dtypes(include=['object']).columns.tolist()
+# 인코더 로드 (없을 수도 있으니 try 사용)
+try:
+    encoder = joblib.load('model/encoder.pkl')
+except FileNotFoundError:
     encoder = None
-    if obj_cols:
-        encoder = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-        X[obj_cols] = encoder.fit_transform(X[obj_cols].astype(str))
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.4, random_state=42, stratify=y['BPHIGH4']
-    )
+# 🔁 너가 저장할 때 사용한 실제 리스트로 바꿔줘야 함
+feature_cols = [
+    'GENHLTH', 'PHYSHLTH', 'MENTHLTH', 'POORHLTH', 'HLTHPLN1', 'PERSDOC2', 'MEDCOST',
+    'CHECKUP1', 'BLOODCHO', 'CHOLCHK', 'TOLDHI2', 'CVDINFR4', 'ASTHMA3', 'ASTHNOW',
+    'CHCSCNCR', 'CHCOCNCR', 'CHCCOPD1', 'HAVARTH3', 'ADDEPEV2', 'MARITAL', 'EDUCA',
+    'RENTHOM1', 'VETERAN3', 'EMPLOY1', 'INCOME2', 'INTERNET', 'QLACTLM2', 'USEEQUIP',
+    'DECIDE', 'DIFFWALK', 'DIFFDRES', 'DIFFALON', 'SMOKE100', 'STOPSMK2', 'LASTSMK2',
+    'USENOW3', 'LMTJOIN3', 'ARTHDIS2', 'ARTHSOCL', 'JOINPAIN', 'FLUSHOT6', 'PNEUVAC3',
+    'HIVTST6', 'HIVTSTD3', 'WHRTST10', 'PDIABTST', 'PREDIAB1', 'CIMEMLOS', 'SXORIENT',
+    'TRNSGNDR', 'MSCODE', '_RFHLTH', '_HCVU651', '_CHOLCHK', '_RFCHOL', '_LTASTH1',
+    '_CASTHM1', '_ASTHMS1', '_DRDXAR1', '_MRACE1', '_HISPANC', '_RACE', '_RACEG21',
+    '_INCOMG', '_PASTAE1', '_FLSHOT6', '_PNEUMO2', '_AIDTST3', 'EXRACT11', 'EXEROFT1',
+    'EXERHMM1', 'EXRACT21', 'EXEROFT2', 'EXERHMM2', 'DRNK3GE5', '_RFBING5', '_DRNKWEK',
+    '_RFDRHV5', 'FTJUDA1_', 'FRUTDA1_', 'BEANDAY_', 'GRENDAY_', 'ORNGDAY_', 'VEGEDA1_',
+    '_FRUTSUM', '_VEGESUM', '_FRTLT1', '_VEGLT1', 'ACTIN11_', 'ACTIN21_', 'PADUR1_',
+    'PADUR2_', 'PAFREQ1_', 'PAFREQ2_', '_MINAC11', '_MINAC21', 'STRFREQ_', 'PAMIN11_',
+    'PAMIN21_', 'PAVIG11_', 'PAVIG21_', '_PAINDX1', '_PA300R2', '_PASTRNG', '_PAREC1',
+    '_BMI5CAT', '_PA150R2', 'SEX', 'PREGNANT', 'SMOKDAY2', 'ALCDAY5', 'AVEDRNK2',
+    'MAXDRNKS', 'FRUITJU1', 'FRUIT1', 'FVBEANS', 'FVGREEN', 'FVORANG', 'VEGETAB1',
+    'EXERANY2', 'STRENGTH', '_RFHYPE5', '_MICHD', 'HTM4', 'WTKG3', '_BMI5', '_SMOKER3',
+    'DRNKANY5', 'DROCDY3_', '_PACAT1', '_AGEG5YR'
+] # 입력 피처 전체 목록
 
-    category_feature = ['GENHLTH', 'PERSDOC2', 'CHECKUP1', 'CHOLCHK', 'MARITAL', 'EDUCA',
-        'RENTHOM1', 'EMPLOY1', 'INCOME2', 'USENOW3', 'ARTHSOCL', 'WHRTST10',
-        'SXORIENT', '_ASTHMS1', '_MRACE1', '_RACE', '_INCOMG', 'ACTIN11_',
-        'ACTIN21_', '_PA300R2', '_PAREC1', '_BMI5CAT', '_PA150R2',
-        'SEX', 'SMOKDAY2', '_SMOKER3', '_PACAT1', '_AGEG5YR', 'LASTSMK2', 'MSCODE']
-    
-    # 말도 안되는 결과를 출력하는 6가지 컬럼 제외
-    category_feature = [c for c in category_feature if c not in ['BPMEDS', 'INSULIN', 'DOCTDIAB', 'CHKHEMO3', 'FEETCHK', 'DIABEYE']]
+obj_cols = ['LASTSMK2', 'USENOW3', 'ARTHSOCL', 'WHRTST10', 'SXORIENT', '_ASTHMS1',
+            '_MRACE1', '_RACE', '_INCOMG', 'ACTIN11_', 'ACTIN21_', '_PA300R2',
+            '_PAREC1', '_BMI5CAT', '_PA150R2', 'SEX', 'SMOKDAY2', '_SMOKER3',
+            '_PACAT1', '_AGEG5YR', 'MSCODE']# 문자열/범주형 컬럼
 
-    
-    X_train[category_feature] = X_train[category_feature].astype('category')
-    X_test[category_feature] = X_test[category_feature].astype('category')
+category_feature = ['GENHLTH', 'PERSDOC2', 'CHECKUP1', 'CHOLCHK', 'MARITAL', 'EDUCA',
+                    'RENTHOM1', 'EMPLOY1', 'INCOME2', 'USENOW3', 'ARTHSOCL', 'WHRTST10',
+                    'SXORIENT', '_ASTHMS1', '_MRACE1', '_RACE', '_INCOMG', 'ACTIN11_',
+                    'ACTIN21_', '_PA300R2', '_PAREC1', '_BMI5CAT', '_PA150R2',
+                    'SEX', 'SMOKDAY2', '_SMOKER3', '_PACAT1', '_AGEG5YR', 'LASTSMK2', 'MSCODE']# LightGBM에서 category로 설정한 컬럼
 
-    # 최적 파라미터 또는 실험용 하이퍼파라미터를 넣은 예
-    model = MultiOutputClassifier(LGBMClassifier(
-    # 다중 이진 분류
-    objective='binary',
-    # 재현성
-    random_state=42,
-    # 학습률 / 필수 요소
-    learning_rate=0.05,
-    # 트리개수 / 필수 요소
-    n_estimators=300,
-    # 각 트리의 최대 깊이 / 선택적 요소
-    max_depth=7,
-    # 하나의 트리에서 사용할 수 있는 리프 노드의 수 / 필수 요소
-    num_leaves=60,
-    # 리프 노드가 각져야 하는 최소 데이터 수 / 필수 요소
-    min_child_samples=15,
-    # 학습에 사용할 데이터 샘플 비율 / 선택적 요소
-    subsample=0.9,
-    # 하나의 트리 학습 시 사용할 피처 비율 / 선택적 요소
-    colsample_bytree=0.8,
-    # L1 정규화 계수 / 선택적 요소
-    reg_alpha=2.0,
-    # L2 정규화 계수 / 선택적 요소
-    reg_lambda=1.0,
-    # 출력 제어용 / 선택적 요소
-    verbose=-1
-    ), n_jobs=-1)
+target_cols = ['BPHIGH4', 'CVDCRHD4', 'CVDSTRK3', 'CHCKIDNY', 'DIABETE3']
 
-    model.fit(X_train, y_train,
-                categorical_feature = category_feature)
-    
-
-    os.makedirs('model', exist_ok=True)
-
-    joblib.dump(model, 'model/lgbm_multi_model.pkl')
-    print("✅ 모델 저장 완료 → model/lgbm_multi_model.pkl")
-
-    if encoder:
-        joblib.dump(encoder, 'model/encoder.pkl')
-        print("✅ 인코더 저장 완료 → model/encoder.pkl")
-
-
-    print("=== 최종 테스트 성능 ===")
-    y_pred = model.predict(X_test)
-    for idx, col in enumerate(target_cols):
-        acc = accuracy_score(y_test[col], y_pred[:, idx])
-        print(f"\n[{col}] 정확도: {acc:.4f}")
-        print(classification_report(
-            y_test[col],
-            y_pred[:, idx],
-            labels=[0, 1],
-            target_names=["음성(0)", "양성(1)"],
-            digits=4
-        ))
-
-    print("\n\n--- 사용자 입력 예측 ---")
-    print(f"총 피처 수: {len(feature_cols)}")
-    print("값 입력 없이 엔터를 누르게 되면 Null(빈칸)으로 처리가 됩니다.\n\n")
-
-    feature_desc = {
+feature_help = {
         'GENHLTH':   "전반적인 건강 상태에 대한 자가 평가 (예: 1: 'Excellent', 2: 'VeryGood', 3: 'Good', 4: 'Fair', 5: 'Poor', -1='Unknown')",
         'PHYSHLTH':  "지난 30일간 신체 건강이 좋지 않았던 일수 (예: 0~30 사이 정수, -1=Unknown)",
         'MENTHLTH':  "지난 30일간 정신 건강(스트레스, 우울, 감정 문제 포함한 활동을 하지 못함) 일수 (예: 0~30 사이 정수, -1=Unknown)", 
@@ -244,83 +189,64 @@ def main():
         '_AGEG5YR':  "나이 5세 단위 그룹 (예: 1=18–24, 2=25–29, 3=30–34, 4=35–39, 5=40–44, 6=45–49, 7=50–54, 8=55–59, 9=60–64, 10=65–69, 11=70–74, 12=75–79, 13=80+)"
     }
 
-    numeric_info = {}
-    for col in feature_cols:
-        if col not in obj_cols:
-            col_num = pd.to_numeric(df[col], errors='coerce').dropna()
-            if not col_num.empty:
-                numeric_info[col] = (
-                    int(col_num.min()),
-                    int(col_num.max()),
-                    int(col_num.mean())
-                )
+st.set_page_config(page_title="질병 예측기", layout="centered")
+st.title("🧬 질병 예측 프로그램")
 
-    categorical_info = {
-        col: list(encoder.categories_[i]) for i, col in enumerate(obj_cols)
-    } if encoder else {}
+# 👉 사용자 입력 폼
+with st.form(key="input_form"):
+    user_input = {}  # ✅ 반드시 먼저 선언
 
-    new_data = {}
     for col in feature_cols:
-        if col in feature_desc:
-            desc = feature_desc[col]
-        elif col in categorical_info:
-            desc = f"(예: {', '.join(map(str, categorical_info[col]))})"
-        elif col in numeric_info:
-            min_val, max_val, mid_val = numeric_info[col]
-            desc = f"(예: {mid_val}, 범위: {min_val}~{max_val})"
+        st.markdown(f"<div style='font-size: 13px; color: lightgray;'>{feature_help.get(col, '')}</div>", unsafe_allow_html=True)
+    
+        if encoder and col in obj_cols:
+            options = list(map(str, encoder.categories_[obj_cols.index(col)]))
+            user_input[col] = st.selectbox(col, [""] + options, key=f"{col}_select")
         else:
-            desc = "(입력 예시 없음)"
+            user_input[col] = st.text_input(col, value="", key=f"{col}_input")
 
 
-        val = input(f"[{col}] {desc} → ").strip()
-        if val == '' or val.lower() == 'nan':
-            new_data[col] = np.nan
+    submitted = st.form_submit_button("예측하기")
+
+# 👉 예측 로직
+if submitted:
+    new_df = pd.DataFrame([user_input])
+
+    # 빈 값은 np.nan 처리
+    for col in feature_cols:
+        val = user_input[col]
+        if val == '':
+            new_df[col] = np.nan
         else:
             try:
-                new_data[col] = float(val)
+                new_df[col] = float(val)
             except:
-                new_data[col] = np.nan
+                new_df[col] = val
 
-    new_df = pd.DataFrame([new_data])
+    # 🔁 문자열 인코딩 처리 (encoder가 있을 경우에만)
     if encoder and obj_cols:
         new_df[obj_cols] = encoder.transform(new_df[obj_cols].astype(str))
-        # 범주형 컬럼 지정 (학습 시 사용한 컬럼과 동일해야 함)
+
+    # 범주형 컬럼 처리
     new_df[category_feature] = new_df[category_feature].astype('category')
 
-
+    # 예측
     probas_list = model.predict_proba(new_df)
-    print("\n=== 예측 결과 ===")
+
+    # 👉 결과 출력
+    st.subheader("📊 예측 결과")
     for idx, col in enumerate(target_cols):
         try:
             prob = probas_list[idx][0][1] * 100 if len(probas_list[idx][0]) > 1 else 0
-            print(f"[{col}] 양성 확률: {prob:.2f}%")
+            st.write(f"**{col}**: 양성 확률 **{prob:.2f}%**")
+            fig, ax = plt.subplots()
+            ax.pie([prob, 100 - prob], labels=['양성', '음성'], autopct='%1.1f%%', startangle=90)
+            ax.axis('equal')
+            st.pyplot(fig)
         except Exception as e:
-            print(f"[{col}] 예측 실패: {e}")
+            st.error(f"[{col}] 예측 실패: {e}")
 
-
-    print("\n=== SHAP 분석 결과 ===")
-    for i, col in enumerate(target_cols):
-        try:
-            print(f"\n[{col}] SHAP 설명")
-
-            clf = model.estimators_[i]
-            explainer = shap.Explainer(clf)
-            shap_values = explainer(new_df)
-
-        # 시각화
-            shap.plots.waterfall(shap_values[0], max_display=10)
-
-        # SHAP 값을 CSV로 저장
-            shap_df = pd.DataFrame(shap_values.values[0], index=new_df.columns, columns=['shap_value'])
-            shap_df['abs_shap'] = shap_df['shap_value'].abs()
-            shap_df = shap_df.sort_values('abs_shap', ascending=False)
-            shap_df.to_csv(f"shap_values_{col}.csv", encoding='utf-8-sig')
-            print(f"[{col}] SHAP 값 저장 완료 → shap_values_{col}.csv")
-
-        except Exception as e:
-            print(f"[{col}] SHAP 실패: {e}")
-
-
-
-if __name__ == '__main__':
-    main()
+    # 다시 입력
+    st.success("예측이 완료되었습니다. 아래에서 다시 입력할 수 있습니다.")
+    if st.button("입력화면으로 돌아가기"):
+        st.rerun()
