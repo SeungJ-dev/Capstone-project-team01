@@ -198,6 +198,9 @@ feature_help = {
     }
 
 st.set_page_config(page_title="질병 예측기", layout="centered")
+
+st.image("img/title_image.png", use_container_width=True)
+
 st.title("🧬 질병 예측 프로그램")
 
 # 👉 사용자 입력 폼
@@ -249,24 +252,51 @@ if submitted:
     # 예측
     probas_list = model.predict_proba(new_df)
 
+
+    disease_names = {
+    'BPHIGH4': "고혈압",
+    'CVDCRHD4': "관상동맥질환",
+    'CVDSTRK3': "뇌졸중",
+    'CHCKIDNY': "신장질환",
+    'DIABETE3': "당뇨병"
+}
+
     # 👉 결과 출력
-    # 예측 결과 출력
     st.subheader("📊 예측 결과")
+    # 질병별 위험군 기준 정의
+    risk_levels = {
+        'BPHIGH4': [(0, 40, "건강"), (40, 70, "주의"), (70, 100, "위험")],
+        'CVDCRHD4': [(0, 35, "건강"), (35, 55, "주의"), (55, 100, "위험")],
+        'CVDSTRK3': [(0, 20, "건강"), (20, 40, "주의"), (40, 100, "위험")],
+        'CHCKIDNY': [(0, 9, "건강"), (9, 17, "주의"), (17, 100, "위험")],
+        'DIABETE3': [(0, 12, "건강"), (12, 22, "주의"), (22, 100, "위험")],
+    }
+
     for idx, col in enumerate(target_cols):
         try:
             prob = probas_list[idx][0][1] * 100 if len(probas_list[idx][0]) > 1 else 0
             st.write(f"**{col}**: 양성 확률 **{prob:.2f}%**")
 
-            # ✅ 파이 차트 한글 깨짐 방지
+            # 🔎 위험군 텍스트 계산
+            risk_text = "해당 없음"
+            for start, end, label in risk_levels[col]:
+                if start <= prob < end or (label == "위험" and prob == 100):
+                    risk_text = label
+                    break
+
+            st.markdown(f"🧠 **{disease_names[col]}**에 대한 위험군은 **[{risk_text}]** 입니다.")
+
+            # ✅ 파이 차트
             labels = ['양성', '음성']
             sizes = [prob, 100 - prob]
-
-            fig, ax = plt.subplots()
-            ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
+            fig, ax = plt.subplots(figsize=(3, 3))  # 크기 줄이기
+            ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 10})
             ax.axis('equal')
             st.pyplot(fig)
+
         except Exception as e:
             st.error(f"[{col}] 예측 실패: {e}")
+
 
 
     # 다시 입력
